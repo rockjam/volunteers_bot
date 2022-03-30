@@ -21,7 +21,7 @@ provider:
     - Effect: Allow
       Action:
         - rds-db:connect
-      Resource: "arn:aws:rds-db:${opt:region, self:provider.region}:*"
+      Resource: "arn:aws:rds:${opt:region, self:provider.region}:*"
 package:
   exclude:
     - ./**
