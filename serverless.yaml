@@ -1,0 +1,54 @@
+service:
+  name: volunteers-tg-bot
+
+provider:
+  name: aws
+  runtime: go1.x
+  memorySize: 128
+  region: ${opt:region, 'eu-central-1'}
+  stage: ${opt:stage, 'dev'}
+  tracing: true
+  environment:
+    DB_HOST: !GetAtt RDSInstance.Endpoint.Address
+    DB_PORT: !GetAtt RDSInstance.Endpoint.Port
+    DB_USER: ${env:DB_USER}
+    DB_PASSWORD: ${env:DB_PASSWORD}
+    DB_NAME: ${env:DB_NAME}
+    GROUP_CHAT_ID: ${env:GROUP_CHAT_ID}
+    BOT_TOKEN: ${env:BOT_TOKEN}
+  deploymentBucket:
+    name: volunteers-tg-bot.${self:provider.stage}.${self:provider.region}.deploys
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - rds-db:connect
+      Resource: "arn:aws:rds-db:${opt:region, self:provider.region}:*"
+package:
+  exclude:
+    - ./**
+  include:
+    - ./bin/**
+
+plugins:
+  - serverless-deployment-bucket
+
+functions:
+  BotWebhook:
+    handler: bin/service
+    logRetentionInDays: 14
+    events:
+      - http:
+          path: /incoming_message
+          method: post
+
+resources:
+  Resources:
+    RDSInstance:
+      Type: AWS::RDS::DBInstance
+      Properties:
+        DBInstanceClass: db.t4g.small
+        DBName: ${env:DB_NAME}
+        Engine: postgres
+        MasterUsername: ${env:DB_USER}
+        MasterUserPassword: ${env:DB_PASSWORD}
+

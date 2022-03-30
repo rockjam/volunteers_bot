@@ -1,0 +1,6 @@
+.idea/
+data/
+bin/
+.env
+node_modules/
+yarn-error*
