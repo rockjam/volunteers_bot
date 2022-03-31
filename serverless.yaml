@@ -15,6 +15,7 @@ provider:
     DB_NAME: ${env:DB_NAME}
     GROUP_CHAT_ID: ${env:GROUP_CHAT_ID}
     BOT_TOKEN: ${env:BOT_TOKEN}
+    BOT_NAME: ${env:BOT_NAME}
   deploymentBucket:
     name: volunteers-tg-bot.${self:provider.stage}.${self:provider.region}.deploys
   iamRoleStatements:
@@ -22,6 +23,14 @@ provider:
       Action:
         - rds-db:connect
       Resource: "arn:aws:rds:${opt:region, self:provider.region}:*"
+    - Effect: Allow
+      Action:
+        - ec2:DescribeNetworkInterfaces
+        - ec2:CreateNetworkInterface
+        - ec2:DeleteNetworkInterface
+        - ec2:DescribeInstances
+        - ec2:AttachNetworkInterface
+      Resource: "*"
 package:
   exclude:
     - ./**
@@ -34,7 +43,7 @@ plugins:
 functions:
   BotWebhook:
     handler: bin/service
-    timeout: 30
+    timeout: 6
     logRetentionInDays: 14
     events:
       - http:
@@ -52,4 +61,3 @@ resources:
         Engine: postgres
         MasterUsername: ${env:DB_USER}
         MasterUserPassword: ${env:DB_PASSWORD}
-

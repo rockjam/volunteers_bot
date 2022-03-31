@@ -5,6 +5,7 @@ import (
 	"dv/models"
 	"dv/services"
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/aws/aws-lambda-go/lambda"
@@ -33,7 +34,7 @@ func main() {
 		panic(err)
 	}
 
-	messageService := services.NewMessage(db, os.Getenv("BOT_TOKEN"))
+	messageService := services.NewMessage(db, os.Getenv("BOT_TOKEN"), os.Getenv("BOT_NAME"))
 	eventHandler := handler.NewEventHandler(messageService)
-	lambda.Start(eventHandler)
+	lambda.Start(eventHandler.HandleRequest)
 }

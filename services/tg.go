@@ -25,11 +25,12 @@ const (
 type Message struct {
 	db       *gorm.DB
 	botToken string
+	botName string
 	chatID   int64
 	httpBot  httpbot.Client
 }
 
-func NewMessage(db *gorm.DB, botToken string) Message {
+func NewMessage(db *gorm.DB, botToken string, botName string) Message {
 	chatID, err := strconv.ParseInt(os.Getenv("GROUP_CHAT_ID"), 10, 64)
 	if err != nil {
 		chatID = defaultChatID
@@ -38,6 +39,7 @@ func NewMessage(db *gorm.DB, botToken string) Message {
 		db:       db,
 		chatID:   chatID,
 		botToken: botToken,
+		botName: botName,
 		httpBot:  httpbot.Client{},
 	}
 }
@@ -72,6 +74,12 @@ func (m *Message) HandleIncomingMessage(message []byte) error {
 
 	log.Println(fmt.Sprintf("message chatID is %d, default chat id is %d", request.Message.Chat.ID, m.chatID))
 	if request.Message.Chat.ID == m.chatID {
+		if strings.HasPrefix(request.Message.Text,
+			fmt.Sprintf("%s@%s", startCommand, m.botName)) ||
+			strings.HasPrefix(request.Message.Text,
+				fmt.Sprintf("%s@%s", helpCommand, m.botName)) {
+			return m.processBotCommand(request)
+		}
 		err = m.processGeneralMessage(request)
 		if err != nil {
 			return err
@@ -138,9 +146,6 @@ func (m *Message) storeMessage(msg models.Message, hashtags []models.MessageHash
 	})
 }
 
-//query := db.Table("order").Select("MAX(order.finished_at) as latest").Joins("left join user user on order.user_id = user.id").Where("user.age > ?", 18).Group("order.user_id")
-//db.Model(&Order{}).Joins("join (?) q on order.finished_at = q.latest", query).Scan(&results)
-
 func (m *Message) processGeneralMessage(request models.WebhookRequest) error {
 	return m.storeMessage(requestToMessages(request))
 }
@@ -155,11 +160,11 @@ func (m *Message) processBotCommand(request models.WebhookRequest) error {
 	log.Println("processing bot command ", request.Message.Text)
 	switch {
 	case strings.HasPrefix(request.Message.Text, startCommand):
-		return m.processStartCommand(request.Message.From.ID)
+		return m.processStartCommand(request.Message.Chat.ID)
 	case strings.HasPrefix(request.Message.Text, helpCommand):
-		return m.processStartCommand(request.Message.From.ID)
+		return m.processStartCommand(request.Message.Chat.ID)
 	case strings.HasPrefix(request.Message.Text, infoCommand):
-		return m.processInfoCommand(request.Message.From.ID, request.Message.Text)
+		return m.processInfoCommand(request.Message.Chat.ID, request.Message.Text)
 	}
 	return nil
 }
