@@ -1,7 +1,7 @@
 build:
-	CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o bin/service ./application/main.go
+	GOARCH=amd64 GOOS=linux go build -a -o bin/service ./application/main.go
 
-deploy:
+deploy: build
 	serverless deploy --stage $(STAGE) --verbose
 
 build-local:

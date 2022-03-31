@@ -1,5 +1,4 @@
-service:
-  name: volunteers-tg-bot
+service: volunteers-tg-bot
 
 provider:
   name: aws
@@ -22,7 +21,7 @@ provider:
     - Effect: Allow
       Action:
         - rds-db:connect
-      Resource: "arn:aws:rds-db:${opt:region, self:provider.region}:*"
+      Resource: "arn:aws:rds:${opt:region, self:provider.region}:*"
 package:
   exclude:
     - ./**
@@ -35,6 +34,7 @@ plugins:
 functions:
   BotWebhook:
     handler: bin/service
+    timeout: 30
     logRetentionInDays: 14
     events:
       - http:
@@ -47,6 +47,7 @@ resources:
       Type: AWS::RDS::DBInstance
       Properties:
         DBInstanceClass: db.t4g.small
+        AllocatedStorage: 20
         DBName: ${env:DB_NAME}
         Engine: postgres
         MasterUsername: ${env:DB_USER}
