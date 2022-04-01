@@ -11,6 +11,6 @@ run-local:
 	docker-compose up
 
 node-dependencies:
-	@yarn install
+	npm ci
 
 

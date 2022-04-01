@@ -8,21 +8,16 @@ jobs:
     name: deploy
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Build binary
-        uses: actions/setup-go@v3
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v3
         with:
           go-version: '1.18.0'
-        run: make build
-      - name: Install node modules
-        uses: actions/setup-node@v1
+      - uses: actions/setup-node@v1
         with:
           node-version: 17
-        run: npm ci
-      - name: Deploy Lambda
-        uses: serverless/github-action@v3
-        run: STAGE=production make deploy
+      - uses: serverless/github-action@v3
+      - name: Deploy
+        run: STAGE=production make node-dependencies build deploy
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
