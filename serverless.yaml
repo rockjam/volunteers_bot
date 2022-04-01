@@ -5,7 +5,7 @@ provider:
   runtime: go1.x
   memorySize: 128
   region: ${opt:region, 'eu-central-1'}
-  stage: ${opt:stage, 'dev'}
+  stage: production
   tracing: true
   environment:
     DB_HOST: !GetAtt RDSInstance.Endpoint.Address
