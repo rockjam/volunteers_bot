@@ -5,11 +5,12 @@ import (
 	"dv/adapters/httpbot"
 	"dv/models"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -17,31 +18,69 @@ import (
 	"gorm.io/gorm"
 )
 
-const (
-	defaultChatID  = int64(-1001722078663)
-	maxGetMessages = 10
+var (
+	startCommandText = `
+Greetings from volunteers_ua bot.
+
+Available commands:
+- /start, /help: show this message
+- /info <Location>: show messages from volunteers about <Location>, i.e. /info Berlin
+`
+	invalidInfoCommandText = `
+Invalid info command, maybe location is missing. Example: /info Berlin
+`
+	inlineSearchButton = []httpbot.InlineKeyboardButton{
+		{
+			Text:                         "Search Other Location",
+			SwitchInlineQueryCurrentChat: " ",
+		},
+	}
 )
 
 type Message struct {
 	db       *gorm.DB
 	botToken string
-	botName string
+	botName  string
 	chatID   int64
 	httpBot  httpbot.Client
 }
 
-func NewMessage(db *gorm.DB, botToken string, botName string) Message {
-	chatID, err := strconv.ParseInt(os.Getenv("GROUP_CHAT_ID"), 10, 64)
-	if err != nil {
-		chatID = defaultChatID
-	}
+func NewMessage(db *gorm.DB, botToken string, botName string, chatID int64) Message {
 	return Message{
 		db:       db,
 		chatID:   chatID,
 		botToken: botToken,
-		botName: botName,
+		botName:  botName,
 		httpBot:  httpbot.Client{},
 	}
+}
+
+type cursor struct {
+	location  string
+	direction string
+	timestamp int64
+}
+
+func newCursor(s string) (cursor, error) {
+	parts := strings.Split(s, "§")
+
+	if len(parts) != 3 {
+		return cursor{}, errors.New("failed to parse the cursor")
+	}
+
+	location := parts[0]
+	direction := parts[1]
+	timestamp, err := strconv.ParseInt(parts[2], 0, 64)
+
+	if err != nil {
+		return cursor{}, err
+	}
+
+	return cursor{location: location, direction: direction, timestamp: timestamp}, nil
+}
+
+func (c *cursor) format() string {
+	return fmt.Sprintf("%s§%s§%d", c.location, c.direction, c.timestamp)
 }
 
 func (m *Message) IncomingMessageHTTPHandler() http.HandlerFunc {
@@ -72,26 +111,40 @@ func (m *Message) HandleIncomingMessage(message []byte) error {
 		return err
 	}
 
-	log.Println(fmt.Sprintf("message chatID is %d, default chat id is %d", request.Message.Chat.ID, m.chatID))
-	if request.Message.Chat.ID == m.chatID {
-		if strings.HasPrefix(request.Message.Text,
-			fmt.Sprintf("%s@%s", startCommand, m.botName)) ||
-			strings.HasPrefix(request.Message.Text,
-				fmt.Sprintf("%s@%s", helpCommand, m.botName)) {
-			return m.processBotCommand(request)
+	if request.Message != nil {
+		log.Println("Message: ", request.Message)
+		log.Println(fmt.Sprintf("message chatID is %d, default chat id is %d", request.Message.Chat.ID, m.chatID))
+		if request.Message.Chat.ID == m.chatID {
+			if strings.HasPrefix(request.Message.Text,
+				fmt.Sprintf("%s@%s", startCommand, m.botName)) ||
+				strings.HasPrefix(request.Message.Text,
+					fmt.Sprintf("%s@%s", helpCommand, m.botName)) {
+				return m.processBotCommand(request)
+			}
+			err = m.processGeneralMessage(request)
+			if err != nil {
+				return err
+			}
+			return nil
 		}
-		err = m.processGeneralMessage(request)
-		if err != nil {
-			return err
+
+		if request.Message.Chat.Type == "private" {
+			err = m.processBotCommand(request)
+			if err != nil {
+				return err
+			}
 		}
-		return nil
 	}
-	if request.Message.Chat.Type == "private" {
-		err = m.processBotCommand(request)
-		if err != nil {
-			return err
-		}
+
+	if request.InlineQuery != nil {
+		log.Println("Inline query: ", request.InlineQuery)
 	}
+
+	if request.CallbackQuery != nil {
+		log.Println("Callback query: ", request.CallbackQuery)
+		return m.processInfoCallback(request.CallbackQuery.Message.Chat.ID, request.CallbackQuery.Data)
+	}
+
 	return nil
 }
 
@@ -171,47 +224,174 @@ func (m *Message) processBotCommand(request models.WebhookRequest) error {
 
 func (m *Message) processStartCommand(senderID int64) error {
 	log.Println("processing start command")
-	return m.httpBot.SendWelcomeMessage(m.botToken, senderID)
+	inlineButtons := [][]httpbot.InlineKeyboardButton{
+		{
+			httpbot.InlineKeyboardButton{
+				Text:                         "Search Location",
+				SwitchInlineQueryCurrentChat: " ",
+			},
+		},
+	}
+	return m.httpBot.SendMessage(m.botToken, senderID, startCommandText, inlineButtons)
+}
+
+func (m *Message) processInfoCallback(senderID int64, query string) error {
+	cursor, err := newCursor(query)
+
+	if err != nil {
+		return err
+	}
+
+	return m.sendLocationResponse(senderID, cursor)
 }
 
 func (m *Message) processInfoCommand(senderID int64, command string) error {
 	location := strings.TrimPrefix(command, infoCommand)
-	location = strings.TrimPrefix(location, " ")
+	location = strings.TrimSpace(location)
 	location = strings.Split(location, " ")[0]
+
+	// TODO: find better way to put an initial timestamp, or find a way not to put timestamp and direction
+	cursor := cursor{location: location, direction: "o", timestamp: math.MaxInt64}
+
+	return m.sendLocationResponse(senderID, cursor)
+}
+
+func (m *Message) sendLocationResponse(senderID int64, c cursor) error {
+	location := c.location
 	if len(location) == 0 {
-		return m.httpBot.SendInvalidInfoCommandMessage(m.botToken, senderID)
+		inlineButtons := [][]httpbot.InlineKeyboardButton{inlineSearchButton}
+		return m.httpBot.SendMessage(m.botToken, senderID, invalidInfoCommandText, inlineButtons)
 	}
-	messages, err := m.getMessagesByTag(location)
+	results, err := m.getMessage(c)
 	if err != nil {
 		return err
 	}
-	if len(messages) == 0 {
-		return m.httpBot.SendCustomMessage(m.botToken, senderID,
-			fmt.Sprintf("No messages for location '%s' were found", location))
+	log.Println("results: ", results)
+
+	if results.message != nil {
+		message := *results.message
+
+		navButtons := make([]httpbot.InlineKeyboardButton, 2)
+
+		if results.hasOlder {
+			c := cursor{location: location, direction: "o", timestamp: message.Timestamp}
+			b := httpbot.InlineKeyboardButton{
+				Text:         "Older",
+				CallbackData: c.format(),
+			}
+			navButtons = append(navButtons, b)
+		}
+		if results.hasNewer {
+			c := cursor{location: location, direction: "n", timestamp: message.Timestamp}
+			b := httpbot.InlineKeyboardButton{
+				Text:         "Newer",
+				CallbackData: c.format(),
+			}
+			navButtons = append(navButtons, b)
+		}
+		inlineButtons := [][]httpbot.InlineKeyboardButton{navButtons, inlineSearchButton}
+		return m.httpBot.SendMessage(m.botToken, senderID, formatMessage(message), inlineButtons)
+	} else {
+		inlineButtons := [][]httpbot.InlineKeyboardButton{inlineSearchButton}
+		return m.httpBot.SendMessage(m.botToken, senderID, fmt.Sprintf("No messages for location '%s' were found", location), inlineButtons)
 	}
-	outputBuf := new(bytes.Buffer)
-	outputBuf.WriteString("Following messages were found:\n")
-	for _, message := range messages {
-		outputBuf.WriteString("-----------------------------------\n")
-		messageTS := time.Unix(message.Timestamp, 0)
-		outputBuf.WriteString(fmt.Sprintf("From @%s (%s %s) at %s\n",
-			message.FromUsername, message.FromFirstName, message.FromLastName, messageTS.Format(time.RFC3339)))
-		outputBuf.WriteString(message.Content + "\n")
-	}
-	return m.httpBot.SendCustomMessage(m.botToken, senderID, outputBuf.String())
 }
 
-func (m *Message) getMessagesByTag(tag string) ([]models.Message, error) {
-	tag = "#" + strings.ToLower(tag)
-	log.Println("getting messages for tag ", tag)
-	var results = make([]models.Message, 0, maxGetMessages)
+func formatMessage(message models.Message) string {
+	outputBuf := new(bytes.Buffer)
+	messageTS := time.Unix(message.Timestamp, 0)
+	outputBuf.WriteString(fmt.Sprintf("%s from @%s (%s %s)\n",
+		messageTS.Format(time.RFC822), message.FromUsername, message.FromFirstName, message.FromLastName))
+	outputBuf.WriteString(message.Content)
+	return outputBuf.String()
+}
 
-	res := m.db.Raw(`
-SELECT m.* FROM messages m 
-JOIN message_hashtags h ON m.id = h.message_id AND m.chat_id = h.chat_id AND h.hashtag = ? 
-ORDER BY m.timestamp desc LIMIT ?;`, tag, maxGetMessages).Scan(&results)
-	if res.Error != nil {
+type searchResult struct {
+	message  *models.Message
+	hasOlder bool
+	hasNewer bool
+}
+
+func (m *Message) getMessage(c cursor) (searchResult, error) {
+	searchRes := searchResult{}
+
+	tag := "#" + strings.ToLower(c.location)
+
+	message, err := m.fetchMessages(tag, c)
+	if err != nil {
+		return searchRes, err
+	}
+
+	if message != nil {
+		hasNewer, err := m.hasNewerMessages(*message, tag)
+		if err != nil {
+			return searchRes, err
+		}
+
+		hasOlder, err := m.hasOlderMessages(*message, tag)
+		if err != nil {
+			return searchRes, err
+		}
+
+		searchRes.message = message
+		searchRes.hasNewer = hasNewer
+		searchRes.hasOlder = hasOlder
+	}
+
+	return searchRes, nil
+}
+
+func (m *Message) fetchMessages(tag string, c cursor) (*models.Message, error) {
+	timestamp := c.timestamp
+	var direction string
+	var sorting string
+	if c.direction == "o" {
+		direction = "<"
+		sorting = "desc"
+	} else {
+		direction = ">"
+		sorting = "asc"
+	}
+	log.Println("getting messages for tag: ", tag, "timestamp: ", timestamp, "direction: ", direction)
+
+	var messages []models.Message
+
+	messageQuery := fmt.Sprintf(`
+SELECT m.*
+FROM messages m
+         JOIN message_hashtags h ON m.id = h.message_id AND m.chat_id = h.chat_id AND h.hashtag = ?
+where m.timestamp %s ?
+ORDER BY m.timestamp %s
+LIMIT 1;`, direction, sorting)
+	res := m.db.Raw(messageQuery, tag, timestamp).Scan(&messages)
+
+	if len(messages) == 1 {
+		return &messages[0], res.Error
+	} else {
 		return nil, res.Error
 	}
-	return results, nil
+}
+
+func (m *Message) hasNewerMessages(message models.Message, tag string) (bool, error) {
+	var hasNewer bool
+
+	res := m.db.Raw(`
+SELECT count(*) > 0
+FROM messages m
+         JOIN message_hashtags h ON m.id = h.message_id AND m.chat_id = h.chat_id AND h.hashtag = ?
+where m.timestamp > ?`, tag, message.Timestamp).Scan(&hasNewer)
+
+	return hasNewer, res.Error
+}
+
+func (m *Message) hasOlderMessages(message models.Message, tag string) (bool, error) {
+	var hasOlder bool
+
+	res := m.db.Raw(`
+SELECT count(*) > 0
+FROM messages m
+         JOIN message_hashtags h ON m.id = h.message_id AND m.chat_id = h.chat_id AND h.hashtag = ?
+where m.timestamp < ?`, tag, message.Timestamp).Scan(&hasOlder)
+
+	return hasOlder, res.Error
 }
