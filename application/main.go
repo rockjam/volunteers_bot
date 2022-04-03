@@ -5,7 +5,6 @@ import (
 	"dv/models"
 	"dv/services"
 	"fmt"
-	"log"
 	"os"
 
 	"github.com/aws/aws-lambda-go/lambda"

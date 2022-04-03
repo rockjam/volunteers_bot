@@ -5,7 +5,7 @@ provider:
   runtime: go1.x
   memorySize: 128
   region: ${opt:region, 'eu-central-1'}
-  stage: ${opt:stage, 'dev'}
+  stage: production
   tracing: true
   environment:
     DB_HOST: !GetAtt RDSInstance.Endpoint.Address
@@ -49,6 +49,13 @@ functions:
       - http:
           path: /incoming_message
           method: post
+    vpc:
+      securityGroupIds:
+        - sg-06b8ff2ddadb5347a
+      subnetIds:
+        - subnet-0760078202b8652e7
+        - subnet-04ed4d5a7bda879a0
+        - subnet-0fe18752b667f0ae4
 
 resources:
   Resources:
