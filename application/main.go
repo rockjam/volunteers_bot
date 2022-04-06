@@ -6,6 +6,7 @@ import (
 	"dv/services"
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/aws/aws-lambda-go/lambda"
 	"gorm.io/driver/postgres"
@@ -24,16 +25,21 @@ func main() {
 		),
 		PreferSimpleProtocol: true,
 	}), &gorm.Config{})
-
 	if err != nil {
 		panic(err)
 	}
+
 	err = db.AutoMigrate(&models.Message{}, &models.MessageHashtag{})
 	if err != nil {
 		panic(err)
 	}
 
-	messageService := services.NewMessage(db, os.Getenv("BOT_TOKEN"), os.Getenv("BOT_NAME"))
+	chatID, err := strconv.ParseInt(os.Getenv("GROUP_CHAT_ID"), 10, 64)
+	if err != nil {
+		panic(err)
+	}
+
+	messageService := services.NewMessage(db, os.Getenv("BOT_TOKEN"), os.Getenv("BOT_NAME"), chatID)
 	eventHandler := handler.NewEventHandler(messageService)
 	lambda.Start(eventHandler.HandleRequest)
 }

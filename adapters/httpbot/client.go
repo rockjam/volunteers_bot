@@ -11,42 +11,22 @@ import (
 	"strconv"
 )
 
-var (
-	startCommandText = `
-Greetings from volunteers_ua bot.
-
-Available commands:
-- /start, /help: show this message
-- /info <Location>: show messages from volunteers about <Location>, i.e. /info Berlin
-`
-	startCommandEntities = []sendMessageEntity{
-		{
-			Type:   "bold",
-			Offset: 16,
-			Length: 13,
-		},
-		{
-			Type:   "code",
-			Offset: 92,
-			Length: 16,
-		},
-		{
-			Type:   "bot_command",
-			Offset: 192,
-			Length: 12,
-		},
-	}
-
-	invalidInfoCommandText = `
-Invalid info command, maybe location is missing. Example: /info Berlin
-`
-)
-
 type sendMessagePayload struct {
-	ChatID    int64               `json:"chat_id"`
-	Text      string              `json:"text"`
-	Entities  []sendMessageEntity `json:"entities,omitempty"`
-	ParseMode string              `json:"parse_mode,omitempty"`
+	ChatID      int64               `json:"chat_id"`
+	Text        string              `json:"text"`
+	Entities    []sendMessageEntity `json:"entities,omitempty"`
+	ReplyMarkup replyMarkup         `json:"reply_markup,omitempty"`
+	ParseMode   string              `json:"parse_mode,omitempty"`
+}
+
+type replyMarkup struct {
+	InlineKeyboard [][]InlineKeyboardButton `json:"inline_keyboard,omitempty"`
+}
+
+type InlineKeyboardButton struct {
+	Text                         string `json:"text"`
+	CallbackData                 string `json:"callback_data"`
+	SwitchInlineQueryCurrentChat string `json:"switch_inline_query_current_chat"`
 }
 
 type sendMessageEntity struct {
@@ -58,45 +38,16 @@ type sendMessageEntity struct {
 type Client struct {
 }
 
-func (c *Client) SendWelcomeMessage(botToken string, receiverID int64) error {
-	log.Println("SendWelcomeMessage is called")
+func (c *Client) SendMessage(botToken string, receiverID int64, message string, inlineButtons [][]InlineKeyboardButton) error {
+	log.Println("SendMessage is called")
 	payload := sendMessagePayload{
-		ChatID:   receiverID,
-		Text:     startCommandText,
-		Entities: startCommandEntities,
+		ChatID:      receiverID,
+		Text:        message,
+		ReplyMarkup: replyMarkup{InlineKeyboard: inlineButtons},
 	}
 	data, err := json.Marshal(payload)
 
-	if err != nil {
-		return err
-	}
-	u := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", botToken)
-	return c.sendMessage(data, u)
-}
-
-func (c *Client) SendInvalidInfoCommandMessage(botToken string, receiverID int64) error {
-	log.Println("SendInvalidInfoCommandMessage is called")
-	payload := sendMessagePayload{
-		ChatID:   receiverID,
-		Text:     invalidInfoCommandText,
-		Entities: nil,
-	}
-	data, err := json.Marshal(payload)
-
-	if err != nil {
-		return err
-	}
-	u := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", botToken)
-	return c.sendMessage(data, u)
-}
-
-func (c *Client) SendCustomMessage(botToken string, receiverID int64, message string) error {
-	log.Println("SendCustomMessage is called")
-	payload := sendMessagePayload{
-		ChatID: receiverID,
-		Text:   message,
-	}
-	data, err := json.Marshal(payload)
+	log.Println("Request body: ", string(data))
 
 	if err != nil {
 		return err
