@@ -38,12 +38,18 @@ type sendMessageEntity struct {
 type Client struct {
 }
 
+func (c *Client) SendPlainMessage(botToken string, receiverID int64, message string) error {
+	var emptyInlineButtons [][]InlineKeyboardButton
+	return c.SendMessage(botToken, receiverID, message, emptyInlineButtons)
+}
+
 func (c *Client) SendMessage(botToken string, receiverID int64, message string, inlineButtons [][]InlineKeyboardButton) error {
 	log.Println("SendMessage is called")
 	payload := sendMessagePayload{
 		ChatID:      receiverID,
 		Text:        message,
 		ReplyMarkup: replyMarkup{InlineKeyboard: inlineButtons},
+		ParseMode:   "HTML",
 	}
 	data, err := json.Marshal(payload)
 

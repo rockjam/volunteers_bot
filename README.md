@@ -9,8 +9,8 @@
 - [x] оставить только команды /start и /help
 - [x] отвечать на /start и /help. В остальных случаях воспринимать текст как локацию
 - [x] отвечать ошибкой когда неизвестная / команда
-- [ ] добавить нормальное описание (что делает бот, какие есть команды, примеры)
-  - [ ] синтаксис команд для лички и для группы 
+- [x] добавить нормальное описание (что делает бот, какие есть команды, примеры)
+  - [x] синтаксис команд для лички и для группы 
 - [ ] сделать inline режим для бота, чтобы `@bot Ber` подсказывал результаты
 - [ ] бонус: если `/start` команада вызвана из канала - выводить подробное описание 1 раз
 
@@ -53,7 +53,6 @@ help - як користуватися/как пользоваться/how to us
 ```
 Надає інформацію про розміщення біженців з України в ЄС
 Предоставляет информацию о размещении беженцев из Украины в ЕС 
-
 ```
 
 ### Описание
@@ -61,7 +60,7 @@ help - як користуватися/как пользоваться/how to us
 ```
 Цей бот збирає інформацію про можливості розміщення в містах, регіонах і країнах Європи. Щоб дізнатися актуальну інформацію, відправте боту місто, регіон або країну.
 Этот бот собирает информацию о возможностях размещения в городах, регионах и странах Европы. Чтобы узнать актуальную информацию, отправьте боту город, регион или страну.
-This bot collects information about accomodation in cities, regions and countries of Europe. To get the latest send a city, country or region to the bot.
+This bot collects information about accommodation in cities, regions and countries of Europe. To get the latest send a city, country or region to the bot.
 ```
 
 ### Описание команд
@@ -70,35 +69,40 @@ This bot collects information about accomodation in cities, regions and countrie
 ```
 /start, /help
 
+Hello from <b>Digital Volunteers Arrivals Bot</b>.
+It collects information about accommodation in cities, regions and countries of Europe shared in this group.
+When you share an update, don't forget to include hashtags for location, e.g: #Germany #Berlin
 
+Write a DM to @dv_arrivals_bot to browse all updates.
 ```
 
 #### В личке
 ```
 /start, /help
 
-Send the name of a city, country or region to the bot(for example: Berlin), and it will return the latest information about
-accommodation and conditions 
-
-Use Older/Newer buttons to access older updates.  
- 
-For example:
-`Berlin`
-```
+<b>UKR:</b> Надішліть місто, регіон або країну боту (наприклад: Берлін), щоб отримати актуальну інформацію про можливості та умови розміщення там. Використовуйте кнопки Older/Newer, щоб отримати старі/нові оновлення.
+<b>RU:</b> Отправьте город, регион или страну боту(например: Берлин), чтобы получить актуальную информацию о возможностях и условиях размещения там. Используйте кнопки Older/Newer, чтобы получить старые/новые обновления.    
+<b>EN:</b> Send a city, country or region to the bot(e.g.: Berlin) to get the latest updates on accomodation for it. To browse though updates use Older/Newer buttons next to the message.
 
 ```
-ответ на локацию:
 
-
-```
+#### Ответы
 
 ```
 ответ на локацию если ничего не найдено:
 
-**Berlin**
-Нічого не знайдено, спробуйте інше місто, регіон або країну.
-Ничего не найдено, попробуйте другой город, регион или страну.
-Nothing found, try another city, region or country.
+<b>Berlin</b>:
+<b>UKR:</b> Нічого не знайдено, спробуйте інше місто, регіон або країну.
+<b>RU:</b> Ничего не найдено, попробуйте другой город, регион или страну.
+<b>EN:</b> Nothing found, try another city, region or country.
+```
+
+```
+ответ на неизвестную команду:
+
+<b>UKR:</b> Невідома команда. Надішліть місто, регіон або країну, щоб отримати актуальну інформацію про можливості та умови розміщення, або /start щоб дізнатися як користуватися ботом.
+<b>RU:</b> Неизвестная команда. Отправьте город, регион или страну, чтобы получить актуальную информацию о возможностях и условиях размещения, или /start чтобы узнать как пользоваться ботом.
+<b>EN:</b> Unknown command. Send a city, country or region to get a latest update, or /start for help.
 ```
 
 ### Другие настройки
