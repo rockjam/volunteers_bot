@@ -18,40 +18,55 @@ import (
 	"gorm.io/gorm"
 )
 
-var (
-	startCommandText = `
-Greetings from volunteers_ua bot.
-
-Available commands:
-- /start, /help: show this message
-- /info <Location>: show messages from volunteers about <Location>, i.e. /info Berlin
-`
-	invalidInfoCommandText = `
-Invalid info command, maybe location is missing. Example: /info Berlin
-`
-	inlineSearchButton = []httpbot.InlineKeyboardButton{
-		{
-			Text:                         "Search Other Location",
-			SwitchInlineQueryCurrentChat: " ",
-		},
-	}
+const (
+	startCommand  = "/start"
+	helpCommand   = "/help"
+	commandPrefix = "/"
 )
 
+const (
+	startReply = `
+<b>UKR:</b> Надішліть місто, регіон або країну боту (наприклад: Берлін), щоб отримати актуальну інформацію про можливості та умови розміщення там. Використовуйте кнопки Older/Newer, щоб отримати старі/нові оновлення.
+<b>RU:</b> Отправьте город, регион или страну боту(например: Берлин), чтобы получить актуальную информацию о возможностях и условиях размещения там. Используйте кнопки Older/Newer, чтобы получить старые/новые обновления.    
+<b>EN:</b> Send a city, country or region to the bot(e.g.: Berlin) to get the latest updates on accomodation for it. To browse though updates use Older/Newer buttons next to the message.
+`
+	startGroupReply = `
+Hello from <b>Digital Volunteers Arrivals Bot</b>.
+It collects information about accommodation in cities, regions and countries of Europe shared in this group.
+When you share an update, don't forget to include hashtags for location, e.g: #Germany #Berlin
+
+Write a DM to %s to browse all updates.
+`
+	nothingFoundReply = `
+<b>%s</b>:
+<b>UKR:</b> Нічого не знайдено, спробуйте інше місто, регіон або країну.
+<b>RU:</b> Ничего не найдено, попробуйте другой город, регион или страну.
+<b>EN:</b> Nothing found, try another city, region or country.
+`
+	unknownCommandReply = `
+<b>UKR:</b> Невідома команда. Надішліть місто, регіон або країну, щоб отримати актуальну інформацію про можливості та умови розміщення, або /start щоб дізнатися як користуватися ботом.
+<b>RU:</b> Неизвестная команда. Отправьте город, регион или страну, чтобы получить актуальную информацию о возможностях и условиях размещения, или /start чтобы узнать как пользоваться ботом.
+<b>EN:</b> Unknown command. Send a city, country or region to get a latest update, or /start for help.
+`
+)
+
+const dateFormat = "15:04 • Jan 02, 2006"
+
 type Message struct {
-	db       *gorm.DB
-	botToken string
-	botName  string
-	chatID   int64
-	httpBot  httpbot.Client
+	db          *gorm.DB
+	botToken    string
+	botName     string
+	groupChatID int64
+	httpBot     httpbot.Client
 }
 
-func NewMessage(db *gorm.DB, botToken string, botName string, chatID int64) Message {
+func NewMessage(db *gorm.DB, botToken string, botName string, groupChatID int64) Message {
 	return Message{
-		db:       db,
-		chatID:   chatID,
-		botToken: botToken,
-		botName:  botName,
-		httpBot:  httpbot.Client{},
+		db:          db,
+		groupChatID: groupChatID,
+		botToken:    botToken,
+		botName:     botName,
+		httpBot:     httpbot.Client{},
 	}
 }
 
@@ -113,25 +128,26 @@ func (m *Message) HandleIncomingMessage(message []byte) error {
 
 	if request.Message != nil {
 		log.Println("Message: ", request.Message)
-		log.Println(fmt.Sprintf("message chatID is %d, default chat id is %d", request.Message.Chat.ID, m.chatID))
-		if request.Message.Chat.ID == m.chatID {
-			if strings.HasPrefix(request.Message.Text,
-				fmt.Sprintf("%s@%s", startCommand, m.botName)) ||
-				strings.HasPrefix(request.Message.Text,
-					fmt.Sprintf("%s@%s", helpCommand, m.botName)) {
-				return m.processBotCommand(request)
+		log.Println(fmt.Sprintf("message chatID is %d, default chat id is %d", request.Message.Chat.ID, m.groupChatID))
+		if request.Message.Chat.ID == m.groupChatID {
+			if strings.HasPrefix(request.Message.Text, fmt.Sprintf("%s@%s", startCommand, m.botName)) ||
+				strings.HasPrefix(request.Message.Text, fmt.Sprintf("%s@%s", helpCommand, m.botName)) {
+				return m.processStartCommand(request, true)
+			} else if strings.HasPrefix(request.Message.Text, commandPrefix) {
+				return m.processUnknownCommand(request)
+			} else {
+				return m.processGeneralMessage(request)
 			}
-			err = m.processGeneralMessage(request)
-			if err != nil {
-				return err
-			}
-			return nil
 		}
 
 		if request.Message.Chat.Type == "private" {
-			err = m.processBotCommand(request)
-			if err != nil {
-				return err
+			if strings.HasPrefix(request.Message.Text, startCommand) ||
+				strings.HasPrefix(request.Message.Text, helpCommand) {
+				return m.processStartCommand(request, false)
+			} else if strings.HasPrefix(request.Message.Text, commandPrefix) {
+				return m.processUnknownCommand(request)
+			} else {
+				return m.processInfoCommand(request)
 			}
 		}
 	}
@@ -203,36 +219,18 @@ func (m *Message) processGeneralMessage(request models.WebhookRequest) error {
 	return m.storeMessage(requestToMessages(request))
 }
 
-const (
-	startCommand = "/start"
-	helpCommand  = "/help"
-	infoCommand  = "/info"
-)
-
-func (m *Message) processBotCommand(request models.WebhookRequest) error {
-	log.Println("processing bot command ", request.Message.Text)
-	switch {
-	case strings.HasPrefix(request.Message.Text, startCommand):
-		return m.processStartCommand(request.Message.Chat.ID)
-	case strings.HasPrefix(request.Message.Text, helpCommand):
-		return m.processStartCommand(request.Message.Chat.ID)
-	case strings.HasPrefix(request.Message.Text, infoCommand):
-		return m.processInfoCommand(request.Message.Chat.ID, request.Message.Text)
+func (m *Message) processStartCommand(request models.WebhookRequest, isGroup bool) error {
+	var text string
+	if isGroup {
+		text = fmt.Sprintf(startGroupReply, "@"+m.botName)
+	} else {
+		text = startReply
 	}
-	return nil
+	return m.httpBot.SendPlainMessage(m.botToken, request.Message.Chat.ID, text)
 }
 
-func (m *Message) processStartCommand(senderID int64) error {
-	log.Println("processing start command")
-	inlineButtons := [][]httpbot.InlineKeyboardButton{
-		{
-			httpbot.InlineKeyboardButton{
-				Text:                         "Search Location",
-				SwitchInlineQueryCurrentChat: " ",
-			},
-		},
-	}
-	return m.httpBot.SendMessage(m.botToken, senderID, startCommandText, inlineButtons)
+func (m *Message) processUnknownCommand(request models.WebhookRequest) error {
+	return m.httpBot.SendPlainMessage(m.botToken, request.Message.Chat.ID, unknownCommandReply)
 }
 
 func (m *Message) processInfoCallback(senderID int64, query string) error {
@@ -245,23 +243,18 @@ func (m *Message) processInfoCallback(senderID int64, query string) error {
 	return m.sendLocationResponse(senderID, cursor)
 }
 
-func (m *Message) processInfoCommand(senderID int64, command string) error {
-	location := strings.TrimPrefix(command, infoCommand)
-	location = strings.TrimSpace(location)
+func (m *Message) processInfoCommand(request models.WebhookRequest) error {
+	location := strings.TrimSpace(request.Message.Text)
 	location = strings.Split(location, " ")[0]
 
 	// TODO: find better way to put an initial timestamp, or find a way not to put timestamp and direction
 	cursor := cursor{location: location, direction: "o", timestamp: math.MaxInt64}
 
-	return m.sendLocationResponse(senderID, cursor)
+	return m.sendLocationResponse(request.Message.Chat.ID, cursor)
 }
 
 func (m *Message) sendLocationResponse(senderID int64, c cursor) error {
 	location := c.location
-	if len(location) == 0 {
-		inlineButtons := [][]httpbot.InlineKeyboardButton{inlineSearchButton}
-		return m.httpBot.SendMessage(m.botToken, senderID, invalidInfoCommandText, inlineButtons)
-	}
 	results, err := m.getMessage(c)
 	if err != nil {
 		return err
@@ -289,19 +282,19 @@ func (m *Message) sendLocationResponse(senderID int64, c cursor) error {
 			}
 			navButtons = append(navButtons, b)
 		}
-		inlineButtons := [][]httpbot.InlineKeyboardButton{navButtons, inlineSearchButton}
-		return m.httpBot.SendMessage(m.botToken, senderID, formatMessage(message), inlineButtons)
+		inlineButtons := [][]httpbot.InlineKeyboardButton{navButtons}
+		return m.httpBot.SendMessage(m.botToken, senderID, formatMessage(location, message), inlineButtons)
 	} else {
-		inlineButtons := [][]httpbot.InlineKeyboardButton{inlineSearchButton}
-		return m.httpBot.SendMessage(m.botToken, senderID, fmt.Sprintf("No messages for location '%s' were found", location), inlineButtons)
+		return m.httpBot.SendPlainMessage(m.botToken, senderID, fmt.Sprintf(nothingFoundReply, location))
 	}
 }
 
-func formatMessage(message models.Message) string {
+func formatMessage(location string, message models.Message) string {
 	outputBuf := new(bytes.Buffer)
+	outputBuf.WriteString(fmt.Sprintf("<b>%s</b>\n", location))
 	messageTS := time.Unix(message.Timestamp, 0)
-	outputBuf.WriteString(fmt.Sprintf("%s from @%s (%s %s)\n",
-		messageTS.Format(time.RFC822), message.FromUsername, message.FromFirstName, message.FromLastName))
+	outputBuf.WriteString(fmt.Sprintf("%s • @%s (%s %s)\n\n",
+		messageTS.Format(dateFormat), message.FromUsername, message.FromFirstName, message.FromLastName))
 	outputBuf.WriteString(message.Content)
 	return outputBuf.String()
 }

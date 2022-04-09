@@ -34,12 +34,12 @@ func main() {
 		panic(err)
 	}
 
-	chatID, err := strconv.ParseInt(os.Getenv("GROUP_CHAT_ID"), 10, 64)
+	groupChatID, err := strconv.ParseInt(os.Getenv("GROUP_CHAT_ID"), 10, 64)
 	if err != nil {
 		panic(err)
 	}
 
-	messageService := services.NewMessage(db, os.Getenv("BOT_TOKEN"), os.Getenv("BOT_NAME"), chatID)
+	messageService := services.NewMessage(db, os.Getenv("BOT_TOKEN"), os.Getenv("BOT_NAME"), groupChatID)
 	eventHandler := handler.NewEventHandler(messageService)
 	lambda.Start(eventHandler.HandleRequest)
 }
